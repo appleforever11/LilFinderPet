@@ -30,6 +30,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundleVersion</key><string>1</string>
+  <key>NSHumanReadableCopyright</key><string>Lil Finder sprite sheet artwork credited to BasicAppleGuy at basicappleguy.com.</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
@@ -41,6 +42,8 @@ PLIST
 
 chmod +x "$APP/Contents/MacOS/LilFinderPet"
 xattr -cr "$APP"
+xattr -d com.apple.FinderInfo "$APP" 2>/dev/null || true
+xattr -d 'com.apple.fileprovider.fpfs#P' "$APP" 2>/dev/null || true
 rm -rf "$APP/Contents/_CodeSignature"
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
@@ -50,6 +53,8 @@ mkdir -p "$STAGE"
 /usr/bin/ditto --norsrc "$APP" "$STAGE/LilFinderPet.app"
 ln -s /Applications "$STAGE/Applications"
 xattr -cr "$STAGE"
+xattr -d com.apple.FinderInfo "$STAGE/LilFinderPet.app" 2>/dev/null || true
+xattr -d 'com.apple.fileprovider.fpfs#P' "$STAGE/LilFinderPet.app" 2>/dev/null || true
 codesign --verify --deep --strict --verbose=2 "$STAGE/LilFinderPet.app"
 hdiutil create -volname "Lil Finder Pet" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 

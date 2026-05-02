@@ -906,6 +906,10 @@ struct SettingsPanel: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            Text("Sprite sheet artwork credited to BasicAppleGuy at basicappleguy.com.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             ForEach(0..<SpriteSheet.rows, id: \.self) { row in
                 SpriteRowPicker(
                     row: row,

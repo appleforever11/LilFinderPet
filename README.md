@@ -47,6 +47,10 @@ Optional permissions:
 - **Microphone**: enables Video Companion listening when you explicitly turn it on.
 - **Speech Recognition**: transcribes microphone audio locally through Apple Speech APIs for video comments and questions.
 
+## Credits
+
+Lil Finder sprite sheet artwork is credited to BasicAppleGuy at [basicappleguy.com](https://basicappleguy.com/).
+
 ## Build
 
 Requires macOS 14 or newer and Swift 6 tooling.
