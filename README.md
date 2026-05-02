@@ -49,7 +49,7 @@ Optional permissions:
 
 ## Credits
 
-Lil Finder sprite sheet artwork is credited to BasicAppleGuy at [basicappleguy.com](https://basicappleguy.com/).
+Lil Finder sprite sheet artwork is credited to BasicAppleGuy at [basicappleguy.com/basicappleblog/lil-finder-guy-blind-box](https://basicappleguy.com/basicappleblog/lil-finder-guy-blind-box).
 
 ## Build
 

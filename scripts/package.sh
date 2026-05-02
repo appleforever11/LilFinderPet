@@ -2,13 +2,16 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP="$ROOT/dist/LilFinderPet.app"
+BUILD_ROOT="/tmp/LilFinderPetBuild"
+APP="$BUILD_ROOT/LilFinderPet.app"
 DMG="$ROOT/dist/LilFinderPet.dmg"
 STAGE="/tmp/LilFinderPetDMG"
 
 cd "$ROOT"
 swift build -c release --product LilFinderPet
 
+rm -rf "$BUILD_ROOT"
+mkdir -p "$ROOT/dist"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 /usr/bin/ditto ".build/arm64-apple-macosx/release/LilFinderPet" "$APP/Contents/MacOS/LilFinderPet"
 /usr/bin/ditto "Sources/LilFinderPet/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
@@ -30,7 +33,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundleVersion</key><string>1</string>
-  <key>NSHumanReadableCopyright</key><string>Lil Finder sprite sheet artwork credited to BasicAppleGuy at basicappleguy.com.</string>
+  <key>NSHumanReadableCopyright</key><string>Lil Finder sprite sheet artwork credited to BasicAppleGuy at basicappleguy.com/basicappleblog/lil-finder-guy-blind-box.</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>

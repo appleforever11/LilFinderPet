@@ -906,7 +906,7 @@ struct SettingsPanel: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("Sprite sheet artwork credited to BasicAppleGuy at basicappleguy.com.")
+            Text("Sprite sheet artwork credited to BasicAppleGuy at basicappleguy.com/basicappleblog/lil-finder-guy-blind-box.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
