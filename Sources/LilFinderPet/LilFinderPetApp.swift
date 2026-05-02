@@ -136,7 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isRestorable = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.contentView = NSHostingView(rootView: PetView(animator: animator, bubbleModel: bubbleModel, settings: settings))
-        PetSnapper.snap(panel, to: settings.dockCorner, animated: false)
+        positionPetWindow(panel, animated: false)
         panel.orderFrontRegardless()
 
         petWindow = panel
@@ -213,7 +213,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startContextTimer()
         if let petWindow {
             petWindow.setContentSize(settings.windowSize)
-            PetSnapper.snap(petWindow, to: settings.dockCorner, animated: false)
+            positionPetWindow(petWindow, animated: false)
+        }
+    }
+
+    private func positionPetWindow(_ window: NSWindow, animated: Bool) {
+        if settings.petUsesCustomPosition {
+            let savedOrigin = NSPoint(x: settings.petCustomX, y: settings.petCustomY)
+            let clampedOrigin = PetSnapper.clampedOrigin(savedOrigin, windowSize: window.frame.size)
+            if clampedOrigin != savedOrigin {
+                settings.setCustomPetOrigin(clampedOrigin)
+            }
+            if animated {
+                window.animator().setFrameOrigin(clampedOrigin)
+            } else {
+                window.setFrameOrigin(clampedOrigin)
+            }
+        } else {
+            PetSnapper.snap(window, to: settings.dockCorner, animated: animated)
         }
     }
 
@@ -433,6 +450,9 @@ final class AppSettings: ObservableObject {
     @Published var enableOCR: Bool { didSet { save(enableOCR, for: "enableOCR") } }
     @Published var autoOpenSuggestions: Bool { didSet { save(autoOpenSuggestions, for: "autoOpenSuggestions") } }
     @Published var petDockCornerRaw: String { didSet { save(petDockCornerRaw, for: "petDockCorner") } }
+    @Published var petUsesCustomPosition: Bool { didSet { save(petUsesCustomPosition, for: "petUsesCustomPosition") } }
+    @Published var petCustomX: Double { didSet { defaults.set(petCustomX, forKey: "petCustomX") } }
+    @Published var petCustomY: Double { didSet { defaults.set(petCustomY, forKey: "petCustomY") } }
     @Published var launchAtLogin: Bool { didSet { save(launchAtLogin, for: "launchAtLogin") } }
     @Published var enableVideoCompanion: Bool { didSet { save(enableVideoCompanion, for: "enableVideoCompanion") } }
     @Published var enableVideoListening: Bool { didSet { save(enableVideoListening, for: "enableVideoListening") } }
@@ -448,6 +468,9 @@ final class AppSettings: ObservableObject {
         enableOCR = defaults.object(forKey: "enableOCR") as? Bool ?? true
         autoOpenSuggestions = defaults.object(forKey: "autoOpenSuggestions") as? Bool ?? false
         petDockCornerRaw = defaults.string(forKey: "petDockCorner") ?? PetDockCorner.bottomLeft.rawValue
+        petUsesCustomPosition = defaults.object(forKey: "petUsesCustomPosition") as? Bool ?? false
+        petCustomX = defaults.object(forKey: "petCustomX") as? Double ?? 0
+        petCustomY = defaults.object(forKey: "petCustomY") as? Double ?? 0
         launchAtLogin = defaults.object(forKey: "launchAtLogin") as? Bool ?? LoginItemController.isEnabled
         enableVideoCompanion = defaults.object(forKey: "enableVideoCompanion") as? Bool ?? true
         enableVideoListening = defaults.object(forKey: "enableVideoListening") as? Bool ?? false
@@ -468,6 +491,11 @@ final class AppSettings: ObservableObject {
         set {
             petDockCornerRaw = newValue.rawValue
         }
+    }
+
+    func setCustomPetOrigin(_ origin: NSPoint) {
+        petCustomX = origin.x
+        petCustomY = origin.y
     }
 
     private func save(_ value: Double, for key: String) {
@@ -665,9 +693,10 @@ enum PetLayout {
     static let basePetSize = NSSize(width: 124, height: 134)
     static let windowSize = NSSize(width: 300, height: 220)
     static let edgeInset: CGFloat = 18
+    static let cornerSnapDistance: CGFloat = 140
 }
 
-enum PetDockCorner: String {
+enum PetDockCorner: String, CaseIterable {
     case topLeft
     case topRight
     case bottomLeft
@@ -738,6 +767,11 @@ enum PetSnapper {
     }
 
     @MainActor
+    static func shouldSnapToCorner(_ frame: NSRect) -> Bool {
+        distanceToNearestCorner(frame) <= PetLayout.cornerSnapDistance
+    }
+
+    @MainActor
     static func snap(_ window: NSWindow, to corner: PetDockCorner, animated: Bool) {
         let origin = origin(for: corner, windowSize: window.frame.size, visibleFrame: screen(for: window.frame).visibleFrame)
         if animated {
@@ -745,6 +779,23 @@ enum PetSnapper {
         } else {
             window.setFrameOrigin(origin)
         }
+    }
+
+    @MainActor
+    static func clampedOrigin(_ origin: NSPoint, windowSize: NSSize) -> NSPoint {
+        let probe = NSRect(origin: origin, size: windowSize)
+        let visible = screen(for: probe).visibleFrame
+        let x = min(max(origin.x, visible.minX), visible.maxX - windowSize.width)
+        let y = min(max(origin.y, visible.minY), visible.maxY - windowSize.height)
+        return NSPoint(x: x, y: y)
+    }
+
+    private static func distanceToNearestCorner(_ frame: NSRect) -> CGFloat {
+        let visible = screen(for: frame).visibleFrame
+        return PetDockCorner.allCases
+            .map { origin(for: $0, windowSize: frame.size, visibleFrame: visible) }
+            .map { hypot(frame.origin.x - $0.x, frame.origin.y - $0.y) }
+            .min() ?? .greatestFiniteMagnitude
     }
 
     private static func origin(for corner: PetDockCorner, windowSize: NSSize, visibleFrame: NSRect) -> NSPoint {
@@ -834,8 +885,19 @@ struct PetView: View {
                     return
                 }
                 let corner = PetSnapper.nearestCorner(for: window.frame)
-                settings.dockCorner = corner
-                PetSnapper.snap(window, to: corner, animated: true)
+                if PetSnapper.shouldSnapToCorner(window.frame) {
+                    settings.dockCorner = corner
+                    if settings.petUsesCustomPosition {
+                        settings.petUsesCustomPosition = false
+                    }
+                    PetSnapper.snap(window, to: corner, animated: true)
+                } else {
+                    let clampedOrigin = PetSnapper.clampedOrigin(window.frame.origin, windowSize: window.frame.size)
+                    settings.setCustomPetOrigin(clampedOrigin)
+                    settings.petUsesCustomPosition = true
+                    settings.dockCorner = corner
+                    window.animator().setFrameOrigin(clampedOrigin)
+                }
                 dragStart = nil
             }
     }
