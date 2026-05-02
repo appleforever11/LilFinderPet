@@ -456,7 +456,7 @@ final class AppSettings: ObservableObject {
     }
 
     var windowSize: NSSize {
-        NSSize(width: max(284, 300 * petScale), height: max(204, 220 * petScale))
+        NSSize(width: max(390, 420 * petScale), height: max(204, 220 * petScale))
     }
 
     private func save(_ value: Double, for key: String) {
@@ -657,18 +657,18 @@ struct PetView: View {
     @State private var dragStart: NSPoint?
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: .bottomLeading) {
             if bubbleModel.isVisible {
                 PetBubbleView(model: bubbleModel)
                     .frame(maxWidth: 230)
-                    .padding(.trailing, 60)
+                    .padding(.leading, 112)
                     .padding(.bottom, 128)
-                    .transition(.scale(scale: 0.92, anchor: .bottomTrailing).combined(with: .opacity))
+                    .transition(.scale(scale: 0.92, anchor: .bottomLeading).combined(with: .opacity))
             }
 
             SpriteFrameView(row: animator.currentFrame.row, column: animator.currentFrame.column)
                 .frame(width: settings.petSize.width, height: settings.petSize.height)
-                .padding(.trailing, 8)
+                .padding(.leading, 8)
                 .padding(.bottom, 4)
                 .contextMenu {
                     Button("Settings") {
@@ -779,11 +779,11 @@ struct PetBubbleView: View {
         }
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(alignment: .bottomTrailing) {
+        .overlay(alignment: .bottomLeading) {
             BubbleTail()
                 .fill(.regularMaterial)
                 .frame(width: 18, height: 14)
-                .offset(x: -18, y: 10)
+                .offset(x: 18, y: 10)
         }
         .shadow(color: .black.opacity(0.18), radius: 14, x: 0, y: 8)
     }
@@ -853,7 +853,7 @@ struct BubbleTail: Shape {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
         path.closeSubpath()
         return path
     }
