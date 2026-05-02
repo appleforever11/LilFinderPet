@@ -59,6 +59,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bubbleModel.chatResponder = { [weak self] prompt in
             self?.answerChat(prompt) ?? "I’m here. Ask me again after I look at the current screen."
         }
+        bubbleModel.primaryAction = { [weak self] in
+            self?.performTopSuggestionFromBubble()
+        }
         settings.onChange = { [weak self] in
             self?.applySettings()
         }
@@ -324,10 +327,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastPromptDate = now
         lastPromptContext = contextKey
         if settings.enableBubbles {
-            bubbleModel.show(text: text, primaryTitle: "Show", secondaryTitle: "Later")
+            let actionTitle = suggestionModel.suggestions.first?.actionTitle ?? "Do it"
+            bubbleModel.primaryAction = { [weak self] in
+                self?.performTopSuggestionFromBubble()
+            }
+            bubbleModel.show(text: text, primaryTitle: actionTitle, secondaryTitle: "Later")
         }
         if settings.autoOpenSuggestions && force {
             makeSuggestionsWindow().orderFrontRegardless()
+        }
+    }
+
+    private func performTopSuggestionFromBubble() {
+        if let suggestion = suggestionModel.suggestions.first {
+            suggestionModel.perform(suggestion)
+            animator.play(.waving)
+            if suggestion.action == .openChat {
+                return
+            }
+            let response: String
+            switch suggestion.action {
+            case .copyNote:
+                response = "Copied that note for you."
+            case .openChat:
+                response = "Opened chat. Ask me what you want to do with it."
+            case .openDownloads:
+                response = "Opened Downloads."
+            case .openDesktop:
+                response = "Opened Desktop."
+            case .openSettings:
+                response = "Opened Settings."
+            case .requestScreenRecording:
+                response = "Started the Screen Recording permission flow."
+            case .openScreenRecordingSettings:
+                response = "Opened Screen Recording settings."
+            case .refresh:
+                response = "Refreshing suggestions."
+            }
+            bubbleModel.show(text: response, primaryTitle: "Suggestions", secondaryTitle: "Hide")
+            bubbleModel.primaryAction = { [weak self] in
+                self?.showSuggestions()
+            }
+        } else {
+            suggestionModel.refresh(silent: false)
+            bubbleModel.show(text: "I’m refreshing suggestions from the active app.", primaryTitle: "Suggestions", secondaryTitle: "Hide")
+            bubbleModel.primaryAction = { [weak self] in
+                self?.showSuggestions()
+            }
         }
     }
 
@@ -680,6 +726,7 @@ final class PetBubbleModel: ObservableObject {
 
     private var dismissTask: Task<Void, Never>?
     var chatResponder: ((String) -> String)?
+    var primaryAction: (() -> Void)?
 
     func show(text: String, primaryTitle: String = "Show", secondaryTitle: String = "Later") {
         mode = .prompt
@@ -749,8 +796,8 @@ struct PetBubbleView: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 Button(model.primaryTitle) {
-                    NotificationCenter.default.post(name: .showLilFinderSuggestions, object: nil)
                     model.dismiss()
+                    model.primaryAction?()
                 }
                 Button(model.secondaryTitle) {
                     model.dismiss()
