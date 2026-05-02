@@ -118,10 +118,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func makePetWindow() {
         let size = settings.windowSize
-        let visible = NSScreen.main?.visibleFrame ?? .init(x: 0, y: 0, width: 1440, height: 900)
-        let origin = NSPoint(x: visible.maxX - size.width - 34, y: visible.minY + 18)
         let panel = FocusablePetPanel(
-            contentRect: NSRect(origin: origin, size: size),
+            contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -138,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isRestorable = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.contentView = NSHostingView(rootView: PetView(animator: animator, bubbleModel: bubbleModel, settings: settings))
+        PetSnapper.snap(panel, to: settings.dockCorner, animated: false)
         panel.orderFrontRegardless()
 
         petWindow = panel
@@ -214,6 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startContextTimer()
         if let petWindow {
             petWindow.setContentSize(settings.windowSize)
+            PetSnapper.snap(petWindow, to: settings.dockCorner, animated: false)
         }
     }
 
@@ -432,6 +432,7 @@ final class AppSettings: ObservableObject {
     @Published var enableBubbles: Bool { didSet { save(enableBubbles, for: "enableBubbles") } }
     @Published var enableOCR: Bool { didSet { save(enableOCR, for: "enableOCR") } }
     @Published var autoOpenSuggestions: Bool { didSet { save(autoOpenSuggestions, for: "autoOpenSuggestions") } }
+    @Published var petDockCornerRaw: String { didSet { save(petDockCornerRaw, for: "petDockCorner") } }
     @Published var launchAtLogin: Bool { didSet { save(launchAtLogin, for: "launchAtLogin") } }
     @Published var enableVideoCompanion: Bool { didSet { save(enableVideoCompanion, for: "enableVideoCompanion") } }
     @Published var enableVideoListening: Bool { didSet { save(enableVideoListening, for: "enableVideoListening") } }
@@ -446,6 +447,7 @@ final class AppSettings: ObservableObject {
         enableBubbles = defaults.object(forKey: "enableBubbles") as? Bool ?? true
         enableOCR = defaults.object(forKey: "enableOCR") as? Bool ?? true
         autoOpenSuggestions = defaults.object(forKey: "autoOpenSuggestions") as? Bool ?? false
+        petDockCornerRaw = defaults.string(forKey: "petDockCorner") ?? PetDockCorner.bottomLeft.rawValue
         launchAtLogin = defaults.object(forKey: "launchAtLogin") as? Bool ?? LoginItemController.isEnabled
         enableVideoCompanion = defaults.object(forKey: "enableVideoCompanion") as? Bool ?? true
         enableVideoListening = defaults.object(forKey: "enableVideoListening") as? Bool ?? false
@@ -459,6 +461,15 @@ final class AppSettings: ObservableObject {
         NSSize(width: max(390, 420 * petScale), height: max(204, 220 * petScale))
     }
 
+    var dockCorner: PetDockCorner {
+        get {
+            PetDockCorner(rawValue: petDockCornerRaw) ?? .bottomLeft
+        }
+        set {
+            petDockCornerRaw = newValue.rawValue
+        }
+    }
+
     private func save(_ value: Double, for key: String) {
         defaults.set(value, forKey: key)
         onChange?()
@@ -470,6 +481,11 @@ final class AppSettings: ObservableObject {
     }
 
     private func save(_ value: Bool, for key: String) {
+        defaults.set(value, forKey: key)
+        onChange?()
+    }
+
+    private func save(_ value: String, for key: String) {
         defaults.set(value, forKey: key)
         onChange?()
     }
@@ -648,6 +664,114 @@ enum AnimationSequences {
 enum PetLayout {
     static let basePetSize = NSSize(width: 124, height: 134)
     static let windowSize = NSSize(width: 300, height: 220)
+    static let edgeInset: CGFloat = 18
+}
+
+enum PetDockCorner: String {
+    case topLeft
+    case topRight
+    case bottomLeft
+    case bottomRight
+
+    var isLeftSide: Bool {
+        switch self {
+        case .topLeft, .bottomLeft:
+            return true
+        case .topRight, .bottomRight:
+            return false
+        }
+    }
+
+    var isBottom: Bool {
+        switch self {
+        case .bottomLeft, .bottomRight:
+            return true
+        case .topLeft, .topRight:
+            return false
+        }
+    }
+
+    var viewAlignment: Alignment {
+        switch self {
+        case .topLeft:
+            return .topLeading
+        case .topRight:
+            return .topTrailing
+        case .bottomLeft:
+            return .bottomLeading
+        case .bottomRight:
+            return .bottomTrailing
+        }
+    }
+
+    var transitionAnchor: UnitPoint {
+        switch self {
+        case .topLeft:
+            return .topLeading
+        case .topRight:
+            return .topTrailing
+        case .bottomLeft:
+            return .bottomLeading
+        case .bottomRight:
+            return .bottomTrailing
+        }
+    }
+}
+
+enum PetSnapper {
+    @MainActor
+    static func nearestCorner(for frame: NSRect) -> PetDockCorner {
+        let visible = screen(for: frame).visibleFrame
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        let isLeft = center.x < visible.midX
+        let isBottom = center.y < visible.midY
+        switch (isLeft, isBottom) {
+        case (true, true):
+            return .bottomLeft
+        case (false, true):
+            return .bottomRight
+        case (true, false):
+            return .topLeft
+        case (false, false):
+            return .topRight
+        }
+    }
+
+    @MainActor
+    static func snap(_ window: NSWindow, to corner: PetDockCorner, animated: Bool) {
+        let origin = origin(for: corner, windowSize: window.frame.size, visibleFrame: screen(for: window.frame).visibleFrame)
+        if animated {
+            window.animator().setFrameOrigin(origin)
+        } else {
+            window.setFrameOrigin(origin)
+        }
+    }
+
+    private static func origin(for corner: PetDockCorner, windowSize: NSSize, visibleFrame: NSRect) -> NSPoint {
+        let x: CGFloat
+        let y: CGFloat
+
+        switch corner {
+        case .topLeft, .bottomLeft:
+            x = visibleFrame.minX + PetLayout.edgeInset
+        case .topRight, .bottomRight:
+            x = visibleFrame.maxX - windowSize.width - PetLayout.edgeInset
+        }
+
+        switch corner {
+        case .topLeft, .topRight:
+            y = visibleFrame.maxY - windowSize.height - PetLayout.edgeInset
+        case .bottomLeft, .bottomRight:
+            y = visibleFrame.minY + PetLayout.edgeInset
+        }
+
+        return NSPoint(x: x, y: y)
+    }
+
+    private static func screen(for frame: NSRect) -> NSScreen {
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        return NSScreen.screens.first { $0.visibleFrame.contains(center) } ?? NSScreen.main ?? NSScreen.screens.first!
+    }
 }
 
 struct PetView: View {
@@ -657,19 +781,19 @@ struct PetView: View {
     @State private var dragStart: NSPoint?
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack(alignment: settings.dockCorner.viewAlignment) {
             if bubbleModel.isVisible {
-                PetBubbleView(model: bubbleModel)
+                PetBubbleView(model: bubbleModel, dockCorner: settings.dockCorner)
                     .frame(maxWidth: 230)
-                    .padding(.leading, 112)
-                    .padding(.bottom, 128)
-                    .transition(.scale(scale: 0.92, anchor: .bottomLeading).combined(with: .opacity))
+                    .padding(settings.dockCorner.isLeftSide ? .leading : .trailing, 112)
+                    .padding(settings.dockCorner.isBottom ? .bottom : .top, 128)
+                    .transition(.scale(scale: 0.92, anchor: settings.dockCorner.transitionAnchor).combined(with: .opacity))
             }
 
             SpriteFrameView(row: animator.currentFrame.row, column: animator.currentFrame.column)
                 .frame(width: settings.petSize.width, height: settings.petSize.height)
-                .padding(.leading, 8)
-                .padding(.bottom, 4)
+                .padding(settings.dockCorner.isLeftSide ? .leading : .trailing, 8)
+                .padding(settings.dockCorner.isBottom ? .bottom : .top, 4)
                 .contextMenu {
                     Button("Settings") {
                         NotificationCenter.default.post(name: .showLilFinderSettings, object: nil)
@@ -691,6 +815,7 @@ struct PetView: View {
         .contentShape(Rectangle())
         .gesture(dragGesture)
         .animation(.spring(response: 0.24, dampingFraction: 0.86), value: bubbleModel.isVisible)
+        .animation(.spring(response: 0.22, dampingFraction: 0.88), value: settings.petDockCornerRaw)
     }
 
     private var dragGesture: some Gesture {
@@ -704,6 +829,13 @@ struct PetView: View {
                 window.setFrameOrigin(NSPoint(x: start.x + value.translation.width, y: start.y - value.translation.height))
             }
             .onEnded { _ in
+                guard let window = NSApp.windows.first(where: { $0.contentView is NSHostingView<PetView> }) else {
+                    dragStart = nil
+                    return
+                }
+                let corner = PetSnapper.nearestCorner(for: window.frame)
+                settings.dockCorner = corner
+                PetSnapper.snap(window, to: corner, animated: true)
                 dragStart = nil
             }
     }
@@ -767,6 +899,7 @@ final class PetBubbleModel: ObservableObject {
 
 struct PetBubbleView: View {
     @ObservedObject var model: PetBubbleModel
+    let dockCorner: PetDockCorner
 
     var body: some View {
         Group {
@@ -779,13 +912,26 @@ struct PetBubbleView: View {
         }
         .padding(12)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(alignment: .bottomLeading) {
-            BubbleTail()
+        .overlay(alignment: tailAlignment) {
+            BubbleTail(dockCorner: dockCorner)
                 .fill(.regularMaterial)
                 .frame(width: 18, height: 14)
-                .offset(x: 18, y: 10)
+                .offset(x: dockCorner.isLeftSide ? 18 : -18, y: dockCorner.isBottom ? 10 : -10)
         }
         .shadow(color: .black.opacity(0.18), radius: 14, x: 0, y: 8)
+    }
+
+    private var tailAlignment: Alignment {
+        switch dockCorner {
+        case .topLeft:
+            return .topLeading
+        case .topRight:
+            return .topTrailing
+        case .bottomLeft:
+            return .bottomLeading
+        case .bottomRight:
+            return .bottomTrailing
+        }
     }
 
     private var promptBody: some View {
@@ -849,11 +995,19 @@ struct PetBubbleView: View {
 }
 
 struct BubbleTail: Shape {
+    let dockCorner: PetDockCorner
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        if dockCorner.isBottom {
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: dockCorner.isLeftSide ? rect.minX : rect.maxX, y: rect.maxY))
+        } else {
+            path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: dockCorner.isLeftSide ? rect.minX : rect.maxX, y: rect.minY))
+        }
         path.closeSubpath()
         return path
     }
